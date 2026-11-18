@@ -1,0 +1,16 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Frontend build
+frontend/dist/
+
+# Backend binary
+backend/server
+
+# Editor and OS
+.DS_Store

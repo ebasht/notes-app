@@ -1,0 +1,22 @@
+---
+description: Core project development rules
+alwaysApply: true
+---
+
+# Project Rules
+
+- Before making changes, inspect the relevant existing code.
+- Follow the current project architecture and naming conventions.
+- Make only changes necessary for the requested task.
+- Do not introduce new dependencies without approval.
+- Do not modify unrelated files.
+- Never read or expose production secrets.
+- After implementation, run relevant available tests.
+- Report changed files, verification results, and remaining risks.
+
+## Change Approval
+
+- Before modifying any project files, propose an implementation plan.
+- Wait for explicit user approval before implementing the plan.
+- Do not interpret a request for analysis or planning as approval to modify files.
+- If approval has not been given, do not modify files.
