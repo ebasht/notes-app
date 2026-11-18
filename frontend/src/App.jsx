@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createNote, deleteNote, listNotes, updateNote } from './api.js'
+import { filterNotes } from './search.js'
 
 const blank = { id: null, title: '', body: '' }
 
@@ -10,8 +11,10 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState('')
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
 
   const dirty = draft.title !== saved.title || draft.body !== saved.body
+  const visible = filterNotes(notes, query)
 
   useEffect(() => {
     let ignore = false
@@ -116,20 +119,35 @@ export default function App() {
 
       <section className="workspace">
         <aside className="list" aria-label="Список заметок">
-          {loading ? <p className="empty">Загрузка…</p> : null}
-          {!loading && notes.length === 0 ? <p className="empty">Пока нет заметок</p> : null}
-          {notes.map((note) => (
-            <button
-              key={note.id}
-              type="button"
-              className={note.id === draft.id ? 'note active' : 'note'}
-              onClick={() => choose(note)}
-            >
-              <strong>{note.title}</strong>
-              <span>{preview(note.body)}</span>
-              <time dateTime={note.updatedAt}>{formatWhen(note.updatedAt)}</time>
-            </button>
-          ))}
+          <label className="search">
+            <span>Поиск</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Заголовок или текст"
+              autoComplete="off"
+            />
+          </label>
+          <div className="list-scroll">
+            {loading ? <p className="empty">Загрузка…</p> : null}
+            {!loading && notes.length === 0 ? <p className="empty">Пока нет заметок</p> : null}
+            {!loading && notes.length > 0 && visible.length === 0 ? (
+              <p className="empty">Ничего не найдено</p>
+            ) : null}
+            {visible.map((note) => (
+              <button
+                key={note.id}
+                type="button"
+                className={note.id === draft.id ? 'note active' : 'note'}
+                onClick={() => choose(note)}
+              >
+                <strong>{note.title}</strong>
+                <span>{preview(note.body)}</span>
+                <time dateTime={note.updatedAt}>{formatWhen(note.updatedAt)}</time>
+              </button>
+            ))}
+          </div>
         </aside>
 
         <form className="editor" onSubmit={save}>
