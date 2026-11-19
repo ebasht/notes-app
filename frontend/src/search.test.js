@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { filterNotes } from './search.js'
+import { filterNotes, selectNote } from './search.js'
 
 const notes = [
   { id: 1, title: 'Масло', body: '5w30' },
@@ -52,5 +52,31 @@ describe('filterNotes', () => {
     filterNotes(notes, '.*')
     assert.deepEqual(notes, snapshot)
     assert.equal(notes.length, 3)
+  })
+})
+
+describe('selectNote', () => {
+  const list = [
+    { id: 1, title: 'Масло', body: '5w30' },
+    { id: 2, title: 'Фильтр', body: 'воздух' },
+    { id: 3, title: 'Масляный насос', body: '' },
+  ]
+
+  it('after delete, opens the first remaining match instead of the first remaining note', () => {
+    const rest = list.filter((note) => note.id !== 1)
+    assert.equal(rest[0].id, 2)
+    assert.equal(selectNote(rest, 'масл').id, 3)
+  })
+
+  it('returns null when delete leaves no matches', () => {
+    const rest = list.filter((note) => note.id !== 1)
+    assert.equal(selectNote(rest, '5w30'), null)
+    assert.equal(selectNote([], ''), null)
+  })
+
+  it('keeps the first remaining note when the query is empty', () => {
+    const rest = list.filter((note) => note.id !== 1)
+    assert.equal(selectNote(rest, '').id, 2)
+    assert.equal(selectNote(rest, '   ').id, 2)
   })
 })
