@@ -7,3 +7,7 @@ export function filterNotes(notes, query) {
     return title.includes(needle) || body.includes(needle)
   })
 }
+
+export function selectNote(notes, query) {
+  return filterNotes(notes, query)[0] ?? null
+}

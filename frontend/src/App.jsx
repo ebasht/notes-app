@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createNote, deleteNote, listNotes, updateNote } from './api.js'
-import { filterNotes } from './search.js'
+import { filterNotes, selectNote } from './search.js'
 
 const blank = { id: null, title: '', body: '' }
 
@@ -12,6 +12,8 @@ export default function App() {
   const [pending, setPending] = useState('')
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
+  const queryRef = useRef(query)
+  queryRef.current = query
 
   const dirty = draft.title !== saved.title || draft.body !== saved.body
   const visible = filterNotes(notes, query)
@@ -22,11 +24,10 @@ export default function App() {
       .then((items) => {
         if (ignore) return
         setNotes(items)
-        if (items[0]) {
-          const next = snapshot(items[0])
-          setDraft(next)
-          setSaved(next)
-        }
+        const chosen = selectNote(items, queryRef.current)
+        const next = chosen ? snapshot(chosen) : blank
+        setDraft(next)
+        setSaved(next)
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -92,7 +93,8 @@ export default function App() {
       await deleteNote(draft.id)
       const rest = notes.filter((item) => item.id !== draft.id)
       setNotes(rest)
-      const next = rest[0] ? snapshot(rest[0]) : blank
+      const chosen = selectNote(rest, query)
+      const next = chosen ? snapshot(chosen) : blank
       setDraft(next)
       setSaved(next)
     } catch (err) {
