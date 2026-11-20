@@ -283,7 +283,7 @@ assert_updated_bot_comment() {
 }
 
 test_workflow_contract() {
-  local count request_step prepare_step publish_step
+  local count request_step prepare_step publish_step finish_step
   grep -q 'pull_request_target:' "$WORKFLOW"
   if grep -E '^[[:space:]]*pull_request:' "$WORKFLOW"; then
     echo "untrusted pull_request trigger is present" >&2
@@ -331,10 +331,23 @@ test_workflow_contract() {
     echo "publish step receives OPENAI_API_KEY" >&2
     exit 1
   fi
-  grep -q "outcome != 'reviewed'" "$WORKFLOW"
-  grep -q "outcome != 'too_large'" "$WORKFLOW"
-  grep -q "outcome != 'no_changes'" "$WORKFLOW"
-  grep -q "outcome != 'untrusted_author'" "$WORKFLOW"
+  if grep -q 'steps.prepare.result' "$WORKFLOW"; then
+    echo "workflow uses steps.prepare.result" >&2
+    exit 1
+  fi
+  printf '%s\n' "$publish_step" | grep -q 'always()'
+  printf '%s\n' "$publish_step" | grep -q "steps.prepare.outcome == 'success'"
+  finish_step="$(awk '
+    /^      - name: Fail after publishing OpenAI error$/ { capture = 1 }
+    capture { print }
+  ' "$WORKFLOW")"
+  printf '%s\n' "$finish_step" | grep -q 'always()'
+  printf '%s\n' "$finish_step" | grep -q "steps.publish.outputs.outcome == 'api_error'"
+  printf '%s\n' "$finish_step" | grep -q "steps.publish.outputs.outcome == 'github_error'"
+  if printf '%s\n' "$finish_step" | grep -q "outcome != '"; then
+    echo "finish step uses a denylist of outcomes" >&2
+    exit 1
+  fi
 }
 
 test_file_count_skip() {

@@ -58,7 +58,7 @@ jobs:
 
       - name: Publish comment
         id: publish
-        if: always() && steps.prepare.result == 'success'
+        if: always() && steps.prepare.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -68,8 +68,6 @@ jobs:
       - name: Fail after publishing OpenAI error
         if: >-
           always() &&
-          steps.publish.outputs.outcome != 'reviewed' &&
-          steps.publish.outputs.outcome != 'too_large' &&
-          steps.publish.outputs.outcome != 'no_changes' &&
-          steps.publish.outputs.outcome != 'untrusted_author'
+          (steps.publish.outputs.outcome == 'api_error' ||
+           steps.publish.outputs.outcome == 'github_error')
         run: bash .github/scripts/ai-review.sh finish
