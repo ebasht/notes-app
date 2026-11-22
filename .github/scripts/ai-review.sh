@@ -127,7 +127,9 @@ classify_files() {
           or ($base == "package-lock.json")
           or ($base == "go.sum")
           or (($f | ascii_downcase) | test("\\.(png|jpg|jpeg|gif|webp|ico)$"));
-      # GitHub omits patch for a new empty file. Any other missing patch stays blocking.
+      # GitHub omits patch for a new empty file. All four conditions are required
+      # together. changes == 0 is not inferred from additions and deletions:
+      # if the counters disagree, the file stays missing_patch.
       def empty_added:
         (.patch | type) != "string"
         and .status == "added"
@@ -136,7 +138,13 @@ classify_files() {
         and .changes == 0;
       def file_text:
         "File: \(.filename)\nStatus: \(.status // "unknown")\n"
-        + if (.patch | type) == "string" then .patch else "No text patch" end;
+        + if (.patch | type) == "string" then
+            .patch
+          elif empty_added then
+            "No text patch"
+          else
+            error("missing patch")
+          end;
       if type != "array" then
         {decision: "github_error", reason: "github", text: ""}
       else

@@ -540,6 +540,38 @@ test_empty_files_count_toward_file_limit() {
   [[ "$(finish_code)" -eq 0 ]]
 }
 
+test_empty_files_at_file_limit_are_reviewed() {
+  local entries index response
+  begin_case
+  entries="$WORK/entries.json"
+  printf '%s\n' "[]" > "$entries"
+  index=1
+  while [[ "$index" -le 14 ]]; do
+    jq -n --arg filename "empty${index}.txt" \
+      '{filename: $filename, status: "added", additions: 0, deletions: 0, changes: 0}' > "$WORK/one.json"
+    jq -s '.[0] + [.[1]]' "$entries" "$WORK/one.json" > "$WORK/next.json"
+    mv "$WORK/next.json" "$entries"
+    index=$((index + 1))
+  done
+  file_entry "backend/main.go" "package main" > "$WORK/one.json"
+  jq -s '.[0] + [.[1]]' "$entries" "$WORK/one.json" > "$WORK/next.json"
+  mv "$WORK/next.json" "$entries"
+  write_http "$GH_FILES_RESPONSE" "$entries"
+  write_comments update
+  response="$WORK/response.json"
+  jq -n '{status: "completed", output: [{type: "message", content: [{type: "output_text", text: "Существенных замечаний нет."}]}]}' > "$response"
+  export CURL_RESPONSE_BODY="$response"
+  export CURL_HTTP_CODE="200"
+  export CURL_EXIT="0"
+  run_prepare
+  run_request_if_needed
+  assert_contains "$GITHUB_OUTPUT" "decision=review"
+  [[ "$(grep -c '^curl$' "$CURL_LOG")" -eq 1 ]]
+  run_publish
+  assert_excludes "$GH_LAST_BODY" "AI Review Skipped"
+  [[ "$(finish_code)" -eq 0 ]]
+}
+
 test_ignored_files_are_not_sent() {
   local body response
   begin_case
@@ -988,6 +1020,7 @@ run_test "missing patch skip" test_missing_patch_skip
 run_test "empty added file is reviewed" test_empty_added_file_is_reviewed
 run_test "added nonzero without patch skips" test_added_nonzero_without_patch_skips
 run_test "empty files count toward file limit" test_empty_files_count_toward_file_limit
+run_test "empty files at file limit are reviewed" test_empty_files_at_file_limit_are_reviewed
 run_test "ignored files are not sent" test_ignored_files_are_not_sent
 run_test "diff remains data" test_diff_is_data
 run_test "timeout fails after comment" test_timeout
