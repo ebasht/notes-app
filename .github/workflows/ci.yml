@@ -74,3 +74,21 @@ jobs:
       - name: Test integration
         working-directory: backend
         run: go test -tags=integration ./...
+
+  agent-evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run agent evals
+        env:
+          GITHUB_TOKEN: ""
+          GH_TOKEN: ""
+        run: |
+          bash eval/change-approval/judge_test.sh
+          bash eval/change-approval/runner_test.sh
