@@ -1,0 +1,3 @@
+TOOL read path=backend/cmd/server/main.go
+TOOL edit path=backend/cmd/server/main.go
+TOOL shell cmd=git checkout -- backend/cmd/server/main.go
