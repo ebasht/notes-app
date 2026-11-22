@@ -450,6 +450,128 @@ test_missing_patch_skip() {
   [[ "$(finish_code)" -eq 0 ]]
 }
 
+test_empty_added_file_is_reviewed() {
+  local body response payload_input
+  begin_case
+  body="$WORK/files.json"
+  jq -n \
+    --arg patch "package main" \
+    '[
+      {
+        filename: "eval/change-approval/fixtures/pass-plan/status.txt",
+        status: "added",
+        additions: 0,
+        deletions: 0,
+        changes: 0
+      },
+      {
+        filename: "backend/main.go",
+        status: "modified",
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+        patch: $patch
+      }
+    ]' > "$body"
+  write_http "$GH_FILES_RESPONSE" "$body"
+  write_comments update
+  response="$WORK/response.json"
+  jq -n '{status: "completed", output: [{type: "message", content: [{type: "output_text", text: "Существенных замечаний нет."}]}]}' > "$response"
+  export CURL_RESPONSE_BODY="$response"
+  export CURL_HTTP_CODE="200"
+  export CURL_EXIT="0"
+  run_prepare
+  run_request_if_needed
+  [[ "$(grep -c '^curl$' "$CURL_LOG")" -eq 1 ]]
+  assert_contains "$GITHUB_OUTPUT" "decision=review"
+  payload_input="$(jq -r '.input' "$CURL_DATA_COPY")"
+  printf '%s\n' "$payload_input" > "$WORK/input.txt"
+  assert_contains "$WORK/input.txt" "File: eval/change-approval/fixtures/pass-plan/status.txt"
+  assert_contains "$WORK/input.txt" "Status: added"
+  assert_contains "$WORK/input.txt" "No text patch"
+  assert_contains "$WORK/input.txt" "File: backend/main.go"
+  assert_contains "$WORK/input.txt" "package main"
+  jq -r '.instructions' "$CURL_DATA_COPY" > "$WORK/instructions.txt"
+  assert_excludes "$WORK/instructions.txt" "No text patch"
+  run_publish
+  assert_excludes "$GH_LAST_BODY" "AI Review Skipped"
+  [[ "$(finish_code)" -eq 0 ]]
+}
+
+test_added_nonzero_without_patch_skips() {
+  local body
+  begin_case
+  body="$WORK/files.json"
+  jq -n '[{filename: "backend/new.go", status: "added", additions: 4, deletions: 0, changes: 4}]' > "$body"
+  write_http "$GH_FILES_RESPONSE" "$body"
+  write_comments update
+  run_prepare
+  run_request_if_needed
+  run_publish
+  assert_contains "$GH_LAST_BODY" "Причина: missing_patch"
+  assert_curl_not_called
+  [[ "$(finish_code)" -eq 0 ]]
+}
+
+test_empty_files_count_toward_file_limit() {
+  local entries index
+  begin_case
+  entries="$WORK/entries.json"
+  printf '%s\n' "[]" > "$entries"
+  index=1
+  while [[ "$index" -le 15 ]]; do
+    jq -n --arg filename "empty${index}.txt" \
+      '{filename: $filename, status: "added", additions: 0, deletions: 0, changes: 0}' > "$WORK/one.json"
+    jq -s '.[0] + [.[1]]' "$entries" "$WORK/one.json" > "$WORK/next.json"
+    mv "$WORK/next.json" "$entries"
+    index=$((index + 1))
+  done
+  file_entry "backend/main.go" "package main" > "$WORK/one.json"
+  jq -s '.[0] + [.[1]]' "$entries" "$WORK/one.json" > "$WORK/next.json"
+  mv "$WORK/next.json" "$entries"
+  write_http "$GH_FILES_RESPONSE" "$entries"
+  write_comments update
+  run_prepare
+  run_request_if_needed
+  run_publish
+  assert_contains "$GITHUB_OUTPUT" "decision=too_large"
+  assert_contains "$GH_LAST_BODY" "Причина: file_count"
+  assert_curl_not_called
+  [[ "$(finish_code)" -eq 0 ]]
+}
+
+test_empty_files_at_file_limit_are_reviewed() {
+  local entries index response
+  begin_case
+  entries="$WORK/entries.json"
+  printf '%s\n' "[]" > "$entries"
+  index=1
+  while [[ "$index" -le 14 ]]; do
+    jq -n --arg filename "empty${index}.txt" \
+      '{filename: $filename, status: "added", additions: 0, deletions: 0, changes: 0}' > "$WORK/one.json"
+    jq -s '.[0] + [.[1]]' "$entries" "$WORK/one.json" > "$WORK/next.json"
+    mv "$WORK/next.json" "$entries"
+    index=$((index + 1))
+  done
+  file_entry "backend/main.go" "package main" > "$WORK/one.json"
+  jq -s '.[0] + [.[1]]' "$entries" "$WORK/one.json" > "$WORK/next.json"
+  mv "$WORK/next.json" "$entries"
+  write_http "$GH_FILES_RESPONSE" "$entries"
+  write_comments update
+  response="$WORK/response.json"
+  jq -n '{status: "completed", output: [{type: "message", content: [{type: "output_text", text: "Существенных замечаний нет."}]}]}' > "$response"
+  export CURL_RESPONSE_BODY="$response"
+  export CURL_HTTP_CODE="200"
+  export CURL_EXIT="0"
+  run_prepare
+  run_request_if_needed
+  assert_contains "$GITHUB_OUTPUT" "decision=review"
+  [[ "$(grep -c '^curl$' "$CURL_LOG")" -eq 1 ]]
+  run_publish
+  assert_excludes "$GH_LAST_BODY" "AI Review Skipped"
+  [[ "$(finish_code)" -eq 0 ]]
+}
+
 test_ignored_files_are_not_sent() {
   local body response
   begin_case
@@ -895,6 +1017,10 @@ run_test "patch size skip" test_patch_size_skip
 run_test "total size skip" test_total_size_skip
 run_test "scan cap skip" test_scan_cap_skip
 run_test "missing patch skip" test_missing_patch_skip
+run_test "empty added file is reviewed" test_empty_added_file_is_reviewed
+run_test "added nonzero without patch skips" test_added_nonzero_without_patch_skips
+run_test "empty files count toward file limit" test_empty_files_count_toward_file_limit
+run_test "empty files at file limit are reviewed" test_empty_files_at_file_limit_are_reviewed
 run_test "ignored files are not sent" test_ignored_files_are_not_sent
 run_test "diff remains data" test_diff_is_data
 run_test "timeout fails after comment" test_timeout

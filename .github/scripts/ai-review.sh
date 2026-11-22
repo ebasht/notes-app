@@ -127,18 +127,37 @@ classify_files() {
           or ($base == "package-lock.json")
           or ($base == "go.sum")
           or (($f | ascii_downcase) | test("\\.(png|jpg|jpeg|gif|webp|ico)$"));
+      # GitHub omits patch for a new empty file. All four conditions are required
+      # together. changes == 0 is not inferred from additions and deletions:
+      # if the counters disagree, the file stays missing_patch.
+      def empty_added:
+        (.patch | type) != "string"
+        and .status == "added"
+        and .additions == 0
+        and .deletions == 0
+        and .changes == 0;
+      def file_text:
+        "File: \(.filename)\nStatus: \(.status // "unknown")\n"
+        + if (.patch | type) == "string" then
+            .patch
+          elif empty_added then
+            "No text patch"
+          else
+            error("missing patch")
+          end;
       if type != "array" then
         {decision: "github_error", reason: "github", text: ""}
       else
         (map(select(ignored | not))) as $text
-        | ($text | map(select((.patch | type) != "string"))) as $missing
+        | ($text | map(select((.patch | type) != "string" and (empty_added | not)))) as $missing
+        | ($text | map(select((.patch | type) == "string") | .patch | length)) as $sizes
         | if ($missing | length) > 0 then
             {decision: "too_large", reason: "missing_patch", text: ""}
           elif ($text | length) > $max_files then
             {decision: "too_large", reason: "file_count", text: ""}
-          elif ($text | map(.patch | length) | any(. > $max_patch)) then
+          elif ($sizes | any(. > $max_patch)) then
             {decision: "too_large", reason: "patch_size", text: ""}
-          elif (($text | map(.patch | length) | add) // 0) > $max_total then
+          elif (($sizes | add) // 0) > $max_total then
             {decision: "too_large", reason: "total_size", text: ""}
           elif ($text | length) == 0 then
             {decision: "no_changes", reason: "none", text: ""}
@@ -146,7 +165,7 @@ classify_files() {
             {
               decision: "review",
               reason: "none",
-              text: ($text | map("File: \(.filename)\nStatus: \(.status // "unknown")\n\(.patch)") | join("\n\n"))
+              text: ($text | map(file_text) | join("\n\n"))
             }
           end
       end
